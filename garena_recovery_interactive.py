@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 import sys
+import platform
 
 import aiofiles
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -203,10 +204,16 @@ async def phase1_garena_login(
 ) -> Phase1Result:
     result = Phase1Result(login_status="failed")
     
-    launch_kwargs = {"headless": True, "args": ["--no-sandbox"]}
+    # FIX: Remove --no-sandbox for Windows, add platform detection
+    args = []
+    if platform.system() != "Windows":
+        args = ["--no-sandbox"]
+    
+    launch_kwargs = {"headless": True, "args": args}
     if proxy:
         launch_kwargs["proxy"] = {"server": proxy}
     
+    browser = None
     context = None
     try:
         async with async_playwright() as p:
@@ -274,13 +281,17 @@ async def phase1_garena_login(
                 result.login_status = "failed"
                 result.error = "Could not extract last 4 digits"
             
-            await browser.close()
             return result
     
     except Exception as e:
         result.error = f"{type(e).__name__}: {str(e)[:100]}"
         return result
     finally:
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
         if context:
             try:
                 await context.close()
@@ -298,10 +309,15 @@ async def phase2_napthe_api(
 ) -> Phase2Result:
     result = Phase2Result(api_status="failed")
     
-    launch_kwargs = {"headless": True, "args": ["--no-sandbox"]}
+    args = []
+    if platform.system() != "Windows":
+        args = ["--no-sandbox"]
+    
+    launch_kwargs = {"headless": True, "args": args}
     if proxy:
         launch_kwargs["proxy"] = {"server": proxy}
     
+    browser = None
     context = None
     try:
         async with async_playwright() as p:
@@ -331,7 +347,6 @@ async def phase2_napthe_api(
                     pass
             except Exception as e:
                 result.error = f"napthe login failed: {str(e)[:100]}"
-                await browser.close()
                 return result
             
             if log_callback:
@@ -373,7 +388,6 @@ async def phase2_napthe_api(
                             result.api_status = "success"
                             if log_callback:
                                 log_callback(f"✓ First 3 digits: {result.first_3_digits}")
-                            await browser.close()
                             return result
                         else:
                             result.error = "Could not extract first 3 digits"
@@ -382,17 +396,26 @@ async def phase2_napthe_api(
                 else:
                     result.error = f"Invalid API response"
                 
-                await browser.close()
                 return result
             
             except Exception as e:
                 result.error = f"API call error: {str(e)[:100]}"
-                await browser.close()
                 return result
     
     except Exception as e:
         result.error = f"{type(e).__name__}: {str(e)[:100]}"
         return result
+    finally:
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+        if context:
+            try:
+                await context.close()
+            except Exception:
+                pass
 
 
 async def phase3_recovery_brute_force(
@@ -410,10 +433,15 @@ async def phase3_recovery_brute_force(
         result.error = "Missing first 3 or last 4 digits"
         return result
     
-    launch_kwargs = {"headless": True, "args": ["--no-sandbox"]}
+    args = []
+    if platform.system() != "Windows":
+        args = ["--no-sandbox"]
+    
+    launch_kwargs = {"headless": True, "args": args}
     if proxy:
         launch_kwargs["proxy"] = {"server": proxy}
     
+    browser = None
     context = None
     
     try:
@@ -473,17 +501,14 @@ async def phase3_recovery_brute_force(
                         result.recovery_status = "success"
                         if log_callback:
                             log_callback(f"✓ Found: {test_phone} (attempt {result.attempts})")
-                        await browser.close()
                         return result
                     
                     if "429" in page_content or "too many" in page_content.lower():
                         result.error = "Rate limited (429)"
-                        await browser.close()
                         return result
                     
                     if "locked" in page_content.lower() or "khóa" in page_content.lower():
                         result.error = "Account locked"
-                        await browser.close()
                         return result
                     
                     if (middle_attempt + 1) % 100 == 0:
@@ -498,12 +523,22 @@ async def phase3_recovery_brute_force(
                     continue
             
             result.error = "No valid phone found in 1000 attempts"
-            await browser.close()
             return result
     
     except Exception as e:
         result.error = f"{type(e).__name__}: {str(e)[:100]}"
         return result
+    finally:
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+        if context:
+            try:
+                await context.close()
+            except Exception:
+                pass
 
 
 async def process_account(
@@ -565,47 +600,49 @@ async def process_account(
 class GarenaRecoveryGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Garena Phone Recovery Tool v3")
-        self.root.geometry("800x600")
+        self.root.title("Garena Phone Recovery Tool v3 - FIXED")
+        self.root.geometry("900x650")
         
         self.proxy_rotator = None
+        self.is_running = False
         
         # Main frame
-        main_frame = tk.Frame(root, padx=20, pady=20)
+        main_frame = tk.Frame(root, padx=20, pady=20, bg="#f0f0f0")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Title
         title_label = tk.Label(
             main_frame,
-            text="🔐 Garena Phone Recovery Tool v3",
+            text="🔐 Garena Phone Recovery Tool v3 - FIXED",
             font=("Arial", 16, "bold"),
-            fg="#d4af37"
+            fg="#d4af37",
+            bg="#f0f0f0"
         )
         title_label.pack(pady=10)
         
         # Account credentials
-        account_frame = tk.LabelFrame(main_frame, text="Account Credentials", padx=10, pady=10, font=("Arial", 10, "bold"))
+        account_frame = tk.LabelFrame(main_frame, text="Account Credentials", padx=10, pady=10, font=("Arial", 10, "bold"), bg="#f0f0f0")
         account_frame.pack(fill=tk.X, pady=10)
         
-        tk.Label(account_frame, text="Username:", font=("Arial", 10)).pack(anchor=tk.W)
+        tk.Label(account_frame, text="Username:", font=("Arial", 10), bg="#f0f0f0").pack(anchor=tk.W)
         self.username = tk.Entry(account_frame, width=50, font=("Arial", 10))
         self.username.pack(fill=tk.X, pady=5)
         
-        tk.Label(account_frame, text="Password:", font=("Arial", 10)).pack(anchor=tk.W)
+        tk.Label(account_frame, text="Password:", font=("Arial", 10), bg="#f0f0f0").pack(anchor=tk.W)
         self.password = tk.Entry(account_frame, width=50, font=("Arial", 10), show="*")
         self.password.pack(fill=tk.X, pady=5)
         
-        tk.Label(account_frame, text="💡 Same credentials used for both Garena & napthe.vn", font=("Arial", 8, "italic"), fg="#666").pack(anchor=tk.W, pady=3)
+        tk.Label(account_frame, text="💡 Same credentials used for both Garena & napthe.vn", font=("Arial", 8, "italic"), fg="#666", bg="#f0f0f0").pack(anchor=tk.W, pady=3)
         
         # Proxy option
-        proxy_frame = tk.LabelFrame(main_frame, text="Proxy (Optional)", padx=10, pady=10, font=("Arial", 10, "bold"))
+        proxy_frame = tk.LabelFrame(main_frame, text="Proxy (Optional)", padx=10, pady=10, font=("Arial", 10, "bold"), bg="#f0f0f0")
         proxy_frame.pack(fill=tk.X, pady=10)
         
         self.use_proxy = tk.BooleanVar(value=False)
-        tk.Checkbutton(proxy_frame, text="Use Proxy (proxy.txt)", variable=self.use_proxy, font=("Arial", 10)).pack(anchor=tk.W)
+        tk.Checkbutton(proxy_frame, text="Use Proxy (proxy.txt)", variable=self.use_proxy, font=("Arial", 10), bg="#f0f0f0").pack(anchor=tk.W)
         
         # Buttons
-        button_frame = tk.Frame(main_frame)
+        button_frame = tk.Frame(main_frame, bg="#f0f0f0")
         button_frame.pack(fill=tk.X, pady=15)
         
         self.start_btn = tk.Button(
@@ -633,14 +670,14 @@ class GarenaRecoveryGUI:
         self.clear_btn.pack(side=tk.LEFT, padx=5)
         
         # Output log
-        log_frame = tk.LabelFrame(main_frame, text="📋 Output Log", padx=10, pady=10, font=("Arial", 10, "bold"))
+        log_frame = tk.LabelFrame(main_frame, text="📋 Output Log", padx=10, pady=10, font=("Arial", 10, "bold"), bg="#f0f0f0")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, width=80, font=("Courier", 9), bg="#1e1e1e", fg="#00ff00")
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=12, width=80, font=("Courier", 9), bg="#1e1e1e", fg="#00ff00")
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
         # Status
-        self.status_label = tk.Label(main_frame, text="Ready", font=("Arial", 10), fg="#4CAF50")
+        self.status_label = tk.Label(main_frame, text="Ready", font=("Arial", 10), fg="#4CAF50", bg="#f0f0f0")
         self.status_label.pack(pady=5)
     
     def log(self, message):
@@ -662,6 +699,10 @@ class GarenaRecoveryGUI:
             messagebox.showerror("Error", "Please enter username and password")
             return
         
+        if self.is_running:
+            messagebox.showwarning("Warning", "Already running!")
+            return
+        
         # Disable buttons during processing
         self.start_btn.config(state=tk.DISABLED)
         self.clear_btn.config(state=tk.DISABLED)
@@ -670,6 +711,7 @@ class GarenaRecoveryGUI:
         self.log_text.delete(1.0, tk.END)
         
         # Run async task
+        self.is_running = True
         asyncio.create_task(self.run_recovery(username, password))
     
     async def run_recovery(self, username, password):
@@ -736,6 +778,7 @@ class GarenaRecoveryGUI:
             # Enable buttons
             self.start_btn.config(state=tk.NORMAL)
             self.clear_btn.config(state=tk.NORMAL)
+            self.is_running = False
 
 
 async def main_gui():
