@@ -289,8 +289,8 @@ async def phase1_garena_login(
 
 
 async def phase2_napthe_api(
-    napthe_username: str,
-    napthe_password: str,
+    username: str,
+    password: str,
     garena_username: str,
     timeout: int,
     proxy: Optional[str],
@@ -320,8 +320,8 @@ async def phase2_napthe_api(
             await asyncio.sleep(1)
             
             try:
-                await page.fill("input[name='username'], input[type='email']", napthe_username)
-                await page.fill("input[name='password'], input[type='password']", napthe_password)
+                await page.fill("input[name='username'], input[type='email']", username)
+                await page.fill("input[name='password'], input[type='password']", password)
                 await page.click("button[type='submit'], button:has-text('Đăng nhập')")
                 
                 await asyncio.sleep(2)
@@ -509,8 +509,6 @@ async def phase3_recovery_brute_force(
 async def process_account(
     username: str,
     password: str,
-    napthe_user: str,
-    napthe_pass: str,
     proxy: Optional[str],
     log_callback=None,
 ) -> AuditResult:
@@ -536,34 +534,30 @@ async def process_account(
     
     await asyncio.sleep(5)
     
-    if napthe_user and napthe_pass:
-        result.phase2 = await phase2_napthe_api(
-            napthe_user, napthe_pass, username, 45000, proxy, log_callback
-        )
-        
-        if result.phase2.api_status != "success":
-            result.status = "failed"
-            return result
-        
-        await asyncio.sleep(5)
-        
-        result.phase3 = await phase3_recovery_brute_force(
-            username,
-            result.phase2.first_3_digits,
-            result.phase1.last_4_digits,
-            3.0,
-            45000,
-            proxy,
-            log_callback,
-        )
-        
-        if result.phase3.recovery_status == "success":
-            result.status = "success"
-        else:
-            result.status = "failed"
+    result.phase2 = await phase2_napthe_api(
+        username, password, username, 45000, proxy, log_callback
+    )
+    
+    if result.phase2.api_status != "success":
+        result.status = "failed"
+        return result
+    
+    await asyncio.sleep(5)
+    
+    result.phase3 = await phase3_recovery_brute_force(
+        username,
+        result.phase2.first_3_digits,
+        result.phase1.last_4_digits,
+        3.0,
+        45000,
+        proxy,
+        log_callback,
+    )
+    
+    if result.phase3.recovery_status == "success":
+        result.status = "success"
     else:
         result.status = "failed"
-        result.phase2.error = "napthe.vn credentials not provided"
     
     return result
 
@@ -572,7 +566,7 @@ class GarenaRecoveryGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Garena Phone Recovery Tool v3")
-        self.root.geometry("800x700")
+        self.root.geometry("800x600")
         
         self.proxy_rotator = None
         
@@ -589,29 +583,19 @@ class GarenaRecoveryGUI:
         )
         title_label.pack(pady=10)
         
-        # Garena credentials
-        garen_frame = tk.LabelFrame(main_frame, text="Garena Account", padx=10, pady=10, font=("Arial", 10, "bold"))
-        garen_frame.pack(fill=tk.X, pady=10)
+        # Account credentials
+        account_frame = tk.LabelFrame(main_frame, text="Account Credentials", padx=10, pady=10, font=("Arial", 10, "bold"))
+        account_frame.pack(fill=tk.X, pady=10)
         
-        tk.Label(garen_frame, text="Username:", font=("Arial", 10)).pack(anchor=tk.W)
-        self.garena_user = tk.Entry(garen_frame, width=50, font=("Arial", 10))
-        self.garena_user.pack(fill=tk.X, pady=5)
+        tk.Label(account_frame, text="Username:", font=("Arial", 10)).pack(anchor=tk.W)
+        self.username = tk.Entry(account_frame, width=50, font=("Arial", 10))
+        self.username.pack(fill=tk.X, pady=5)
         
-        tk.Label(garen_frame, text="Password:", font=("Arial", 10)).pack(anchor=tk.W)
-        self.garena_pass = tk.Entry(garen_frame, width=50, font=("Arial", 10), show="*")
-        self.garena_pass.pack(fill=tk.X, pady=5)
+        tk.Label(account_frame, text="Password:", font=("Arial", 10)).pack(anchor=tk.W)
+        self.password = tk.Entry(account_frame, width=50, font=("Arial", 10), show="*")
+        self.password.pack(fill=tk.X, pady=5)
         
-        # napthe.vn credentials
-        napthe_frame = tk.LabelFrame(main_frame, text="napthe.vn Account", padx=10, pady=10, font=("Arial", 10, "bold"))
-        napthe_frame.pack(fill=tk.X, pady=10)
-        
-        tk.Label(napthe_frame, text="Username:", font=("Arial", 10)).pack(anchor=tk.W)
-        self.napthe_user = tk.Entry(napthe_frame, width=50, font=("Arial", 10))
-        self.napthe_user.pack(fill=tk.X, pady=5)
-        
-        tk.Label(napthe_frame, text="Password:", font=("Arial", 10)).pack(anchor=tk.W)
-        self.napthe_pass = tk.Entry(napthe_frame, width=50, font=("Arial", 10), show="*")
-        self.napthe_pass.pack(fill=tk.X, pady=5)
+        tk.Label(account_frame, text="💡 Same credentials used for both Garena & napthe.vn", font=("Arial", 8, "italic"), fg="#666").pack(anchor=tk.W, pady=3)
         
         # Proxy option
         proxy_frame = tk.LabelFrame(main_frame, text="Proxy (Optional)", padx=10, pady=10, font=("Arial", 10, "bold"))
@@ -665,25 +649,17 @@ class GarenaRecoveryGUI:
         self.root.update()
     
     def clear_fields(self):
-        self.garena_user.delete(0, tk.END)
-        self.garena_pass.delete(0, tk.END)
-        self.napthe_user.delete(0, tk.END)
-        self.napthe_pass.delete(0, tk.END)
+        self.username.delete(0, tk.END)
+        self.password.delete(0, tk.END)
         self.log_text.delete(1.0, tk.END)
         self.status_label.config(text="Ready", fg="#4CAF50")
     
     def start_recovery(self):
-        garena_user = self.garena_user.get().strip()
-        garena_pass = self.garena_pass.get().strip()
-        napthe_user = self.napthe_user.get().strip()
-        napthe_pass = self.napthe_pass.get().strip()
+        username = self.username.get().strip()
+        password = self.password.get().strip()
         
-        if not garena_user or not garena_pass:
-            messagebox.showerror("Error", "Please enter Garena username and password")
-            return
-        
-        if not napthe_user or not napthe_pass:
-            messagebox.showerror("Error", "Please enter napthe.vn username and password")
+        if not username or not password:
+            messagebox.showerror("Error", "Please enter username and password")
             return
         
         # Disable buttons during processing
@@ -694,9 +670,9 @@ class GarenaRecoveryGUI:
         self.log_text.delete(1.0, tk.END)
         
         # Run async task
-        asyncio.create_task(self.run_recovery(garena_user, garena_pass, napthe_user, napthe_pass))
+        asyncio.create_task(self.run_recovery(username, password))
     
-    async def run_recovery(self, garena_user, garena_pass, napthe_user, napthe_pass):
+    async def run_recovery(self, username, password):
         try:
             self.status_label.config(text="Running...", fg="#FF9800")
             
@@ -707,12 +683,12 @@ class GarenaRecoveryGUI:
                     self.proxy_rotator = RotatingProxyRotator(proxies)
                     self.log(f"[PROXY] Loaded {len(proxies)} proxies")
                     proxy = await self.proxy_rotator.get_next_proxy()
+                else:
+                    self.log("[WARN] proxy.txt not found, running without proxy")
             
             result = await process_account(
-                garena_user,
-                garena_pass,
-                napthe_user,
-                napthe_pass,
+                username,
+                password,
                 proxy,
                 self.log
             )
